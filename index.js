@@ -12,10 +12,17 @@ mongoose.connect(process.env.MONGO_URI, {
 app.use(cors());
 app.use(express.static("public"));
 
+const exSchema = new mongoose.Schema({
+  date: String,
+  duration: Number,
+  description: String,
+});
+const Exercise = mongoose.model("Exercise", exSchema);
+
 const userSchema = new mongoose.Schema({
   username: String,
   count: 0,
-  log: [{}],
+  log: [exSchema],
 });
 const User = mongoose.model("User", userSchema);
 
@@ -32,7 +39,7 @@ app.use(
 
 app.post("/api/users/", (req, res) => {
   const username = req.body.username;
-  console.log(username);
+
   new User({
     username: username,
   }).save((err, data) => {
@@ -45,14 +52,14 @@ app.get("/api/users", (req, res) => {
     .select("username")
     .exec((err, data) => {
       if (err) console.error("error", err);
-      console.log(data);
+
       res.json(data);
     });
 });
 app.post("/api/users/:id/exercises", (req, res) => {
   const description = req.body.description;
   const duration = req.body.duration;
-  console.log(req.body.date);
+
   let date;
   if (req.body.date == "" || req.body.date == undefined) {
     date = new Date();
@@ -63,11 +70,11 @@ app.post("/api/users/:id/exercises", (req, res) => {
 
   date = date.toDateString();
   const id = req.params.id;
-  const exercise = {
-    description: description,
-    duration: Number(duration),
+  const exercise = new Exercise({
     date: date,
-  };
+    duration: Number(duration),
+    description: description,
+  });
   User.findOneAndUpdate(
     { _id: id },
     { $push: { log: exercise }, $inc: { count: +1 } },
@@ -77,9 +84,9 @@ app.post("/api/users/:id/exercises", (req, res) => {
     res.json({
       _id: data._id,
       username: data.username,
-      date: date,
-      duration: duration,
-      description: description,
+      date: exercise.date,
+      duration: exercise.duration,
+      description: exercise.description,
     });
   });
 });
@@ -92,16 +99,27 @@ app.get("/api/users/:id/logs", (req, res) => {
     .exec((err, data) => {
       if (err) console.error("error", err);
       let logs = data.log;
-      let filteredLogs = logs.filter((log) => {
-        const logDate = new Date(log.date).getTime();
-        const toMS = new Date(to).getTime();
-        const fromMS = new Date(from).getTime();
+      let filteredLogs;
+      if (to == undefined || from == undefined) {
+        filteredLogs = logs;
+      } else {
+        filteredLogs = logs.filter((log) => {
+          const logDate = new Date(log.date).getTime();
+          const toMS = new Date(to).getTime();
+          const fromMS = new Date(from).getTime();
 
-        console.log(log.date);
-        return logDate > fromMS && logDate < toMS;
+          return logDate > fromMS && logDate < toMS;
+        });
+      }
+      if (limit != undefined) {
+        filteredLogs = filteredLogs.slice(0, limit);
+      }
+      res.json({
+        _id: id,
+        username: data.username,
+        count: data.count,
+        log: filteredLogs,
       });
-      console.log(filteredLogs);
-      res.json(data);
     });
 });
 
